@@ -39,6 +39,10 @@ class ParamAssigner {
         }
     }
 
+    void assignParam(PreparedStatement statement, Object param) {
+        assignParam(statement, 1, param);
+    }
+    
     private void assignParam(PreparedStatement statement, Integer index, Object param) {
         try {
             if (param != null) {

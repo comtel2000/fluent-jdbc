@@ -26,6 +26,7 @@ class BatchQueryInternal implements BatchQuery {
 
     private final String sql;
     private final QueryInternal query;
+    private Optional<List<?>> param = empty();
     private Optional<Iterator<List<?>>> params = empty();
     private Optional<Iterator<Map<String, ?>>> namedParams = empty();
     private Optional<Integer> batchSize = empty();
@@ -35,9 +36,21 @@ class BatchQueryInternal implements BatchQuery {
         this.query = query;
     }
 
+
+    @Override
+    public BatchQuery param(List<?> params) {
+        Preconditions.checkNotNull(params, "params");
+        Preconditions.checkArgument(!this.param.isPresent(), positionalSet);
+        Preconditions.checkArgument(!this.params.isPresent(), positionalSet);
+        Preconditions.checkArgument(!namedParams.isPresent(), namedSet);
+        this.param = Optional.of(params);
+        return this;
+    }
+    
     @Override
     public BatchQuery params(Iterator<List<?>> params) {
         Preconditions.checkNotNull(params, "params");
+        Preconditions.checkArgument(!this.param.isPresent(), positionalSet);
         Preconditions.checkArgument(!this.params.isPresent(), positionalSet);
         Preconditions.checkArgument(!namedParams.isPresent(), namedSet);
         this.params = Optional.of(params);
@@ -83,15 +96,25 @@ class BatchQueryInternal implements BatchQuery {
 
     @Override
     public List<UpdateResult> run() {
-        Preconditions.checkArgument(params.isPresent() || namedParams.isPresent(), "Parameters must be set to run a batch query");
+        Preconditions.checkArgument(param.isPresent() || params.isPresent() || namedParams.isPresent(), "Parameters must be set to run a batch query");
         return query.query(
-                connection -> params.isPresent() ? positional(connection) : named(connection),
+                connection -> param.isPresent() || params.isPresent() ? positional(connection) : named(connection),
                 Optional.of(sql)
         );
     }
 
+    private List<UpdateResult> singlePositional(Connection connection) throws SQLException {
+        try (PreparedStatement statement = query.preparedStatementFactory.createBatch(connection, sql)) {
+            return runBatches(statement, param.get());
+        }
+
+    }
+    
     private List<UpdateResult> positional(Connection connection) throws SQLException {
         try (PreparedStatement statement = query.preparedStatementFactory.createBatch(connection, sql)) {
+            if (param.isPresent()){
+                return runBatches(statement, param.get());
+            }
             return runBatches(statement, stream(params.get()));
         }
 
@@ -124,6 +147,12 @@ class BatchQueryInternal implements BatchQuery {
         }
     }
 
+    private List<UpdateResult> runBatches(PreparedStatement ps, List<?> params) throws SQLException {
+        BatchExecution batchExecution = new BatchExecution(ps);
+        params.forEach(consumer(batchExecution::add));
+        return batchExecution.results();
+    }
+    
     private List<UpdateResult> runBatches(PreparedStatement ps, Stream<List<?>> params) throws SQLException {
         BatchExecution batchExecution = new BatchExecution(ps);
         params.forEachOrdered(consumer(batchExecution::add));
@@ -141,6 +170,13 @@ class BatchQueryInternal implements BatchQuery {
             this.ps = ps;
         }
 
+        public void add(Object param) throws SQLException {
+            addParamToBatch(param);
+            if (batchSize.isPresent() && totalBatchesAdded % batchSize.get() == 0) {
+                runBatch();
+            }
+        }
+        
         public void add(List<?> params) throws SQLException {
             addParamsToBatch(params);
             if (batchSize.isPresent() && totalBatchesAdded % batchSize.get() == 0) {
@@ -148,6 +184,13 @@ class BatchQueryInternal implements BatchQuery {
             }
         }
 
+        private void addParamToBatch(Object param) throws SQLException {
+            query.assignParam(ps, param);
+            ps.addBatch();
+            ++totalBatchesAdded;
+            newAdded = true;
+        }
+        
         private void addParamsToBatch(List<?> params) throws SQLException {
             query.assignParams(ps, params);
             ps.addBatch();
@@ -173,4 +216,5 @@ class BatchQueryInternal implements BatchQuery {
             return Collections.unmodifiableList(updateResults);
         }
     }
+
 }

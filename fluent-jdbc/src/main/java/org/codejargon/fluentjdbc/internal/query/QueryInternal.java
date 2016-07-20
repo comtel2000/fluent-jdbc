@@ -100,7 +100,10 @@ public class QueryInternal implements Query {
         return receiver.returnValue();
     }
 
-
+    void assignParam(PreparedStatement statement, Object param) throws SQLException {
+        preparedStatementFactory.assignParam(statement, param);
+    }
+    
     void assignParams(PreparedStatement statement, List<?> params) throws SQLException {
         preparedStatementFactory.assignParams(statement, params);
     }

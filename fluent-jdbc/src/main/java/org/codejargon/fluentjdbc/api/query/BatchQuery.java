@@ -9,6 +9,14 @@ import java.util.stream.Stream;
  * Batch insert or update query for a SQL statement. Is a mutable object.
  */
 public interface BatchQuery {
+
+    /**
+     *
+     * @param param List of single parameters used by the batch update
+     * @return this
+     */
+    BatchQuery param(List<?> params);
+
     /**
      *
      * @param params Parameters used by the batch update
@@ -53,6 +61,7 @@ public interface BatchQuery {
 
     /**
      * Sets size of a batch (database roundtrip)
+     * 
      * @param batchSize size of a batch
      * @return this
      */

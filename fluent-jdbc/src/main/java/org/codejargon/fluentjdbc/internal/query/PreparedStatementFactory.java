@@ -26,6 +26,10 @@ class PreparedStatementFactory {
         return prepareStatement(con, sql, false, emptyGenColumns);
     }
 
+    void assignParam(PreparedStatement statement, Object param) throws SQLException {
+        config.paramAssigner.assignParam(statement, param);
+    }
+    
     void assignParams(PreparedStatement statement, List<?> params) throws SQLException {
         config.paramAssigner.assignParams(statement, params);
     }
